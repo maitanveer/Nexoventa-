@@ -1,5 +1,5 @@
 import { TrainingSlotFilters, type TrainingSlotSummary } from "@/components/admin/training-slot-filters";
-import { logoutAdmin, updateApplicationStatus } from "./actions";
+import { logoutAdmin } from "./actions";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -80,20 +80,7 @@ export default async function AdminDashboard() {
                     <td>{application.batch.course.name}<small>{application.batch.identifier}</small></td>
                     <td>{application.appliedAt.toLocaleDateString("en-GB")}</td>
                     <td><span className={`table-status status-${application.status.toLowerCase()}`}>{application.status}</span></td>
-                    <td>
-                      <form action={updateApplicationStatus} className="status-form">
-                        <input type="hidden" name="id" value={application.id} />
-                        <input type="hidden" name="returnTo" value="/admin" />
-                        <select name="status" defaultValue={application.status} aria-label={`Update ${application.student.fullName} status`}>
-                          <option value="PENDING">PENDING</option>
-                          <option value="CONFIRMED">CONFIRMED</option>
-                          <option value="REJECTED">REJECTED</option>
-                          <option value="CANCELLED">CANCELLED</option>
-                          <option value="WAITLISTED">WAITLISTED</option>
-                        </select>
-                        <button type="submit">Save</button>
-                      </form>
-                    </td>
+                    <td><a className="admin-action" href="/admin/applications">Review payment</a></td>
                   </tr>
                 ))}
                 {applications.length === 0 && <tr><td colSpan={6}><div className="empty-state">No applications yet.</div></td></tr>}

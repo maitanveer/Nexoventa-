@@ -37,6 +37,18 @@ enum SeatStatus {
   RELEASED
 }
 
+enum PaymentStatus {
+  NOT_SUBMITTED
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  SADAPAY
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String?
@@ -46,7 +58,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  auditLogs AuditLog[]
+  auditLogs        AuditLog[]
+  reviewedPayments Payment[] @relation("PaymentReviewer")
 }
 
 model Course {
@@ -55,6 +68,7 @@ model Course {
   slug        String   @unique
   description String
   duration    String
+  fee         Decimal? @db.Decimal(10, 2)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -121,10 +135,38 @@ model Application {
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
   batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payment Payment?
 
   @@unique([studentId, batchId])
   @@index([batchId, seatStatus])
   @@index([status, appliedAt])
+}
+
+model Payment {
+  id                            String        @id @default(cuid())
+  applicationId                 String        @unique
+  status                        PaymentStatus @default(NOT_SUBMITTED)
+  method                        PaymentMethod?
+  expectedAmount                Decimal?      @db.Decimal(10, 2)
+  amount                        Decimal?      @db.Decimal(10, 2)
+  transactionReference          String?
+  normalizedTransactionReference String?
+  paymentDate                   DateTime?
+  receiptPath                   String?
+  submittedAt                   DateTime?
+  reviewedAt                    DateTime?
+  verifiedAt                    DateTime?
+  reviewedById                  String?
+  rejectionReason               String?
+  studentTokenHash              String?       @unique
+  createdAt                     DateTime      @default(now())
+  updatedAt                     DateTime      @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewedBy  User?       @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([method, normalizedTransactionReference])
+  @@index([status, submittedAt])
 }
 
 model Announcement {

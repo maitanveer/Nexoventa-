@@ -76,6 +76,23 @@ Add the following values to your .env file (do not commit this file):
   - Public WhatsApp number used for click-to-chat links.
   - Example: +923555252025
 
+- SUPABASE_URL
+  - Server-only Supabase project URL used to store payment receipts.
+- SUPABASE_SECRET_KEY
+  - Server-only Supabase secret/service-role key. Never prefix this with `NEXT_PUBLIC_`.
+- PAYMENT_INSTRUCTIONS_BANK_TRANSFER
+- PAYMENT_INSTRUCTIONS_SADAPAY
+  - Server-configured receiving details. The supported methods are Bank Transfer (UBL) and SadaPay only. Use `\n` between labeled details; never put secrets in these public-facing instructions.
+- PAYMENT_INSTRUCTIONS_EASYPAISA
+- PAYMENT_INSTRUCTIONS_JAZZCASH
+  - Legacy placeholders only; these methods are not offered or accepted by the current admission workflow. Leave blank.
+
+For deployment, set `PAYMENT_INSTRUCTIONS_BANK_TRANSFER` to `Bank name: United Bank Limited (UBL)\nAccount holder: Basharat Ali Jan\nAccount number: 355141816\nIBAN: PK07UNIL0109000355141816` and `PAYMENT_INSTRUCTIONS_SADAPAY` to `Account holder: Basharat Ali Jan\nRegistered number: 03495728562`. Configure the same values in Vercel's environment settings when ready to deploy.
+
+In Vercel, add these values under **Project Settings → Environment Variables** for each environment that should accept applications. Also configure the existing `DATABASE_URL`, `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, and `NEXT_PUBLIC_WHATSAPP_NUMBER`. Do not place secret values in `NEXT_PUBLIC_` variables.
+
+Create the existing Supabase Storage bucket named `payment-receipts` as **private** before accepting receipts. The application refuses uploads or receipt links if the bucket is missing or public. Admin receipt links are short-lived.
+
 ## PostgreSQL / Neon setup
 
 1. Create a PostgreSQL database in Neon or another managed PostgreSQL provider.
@@ -152,8 +169,10 @@ The application flow is:
 6. Database transaction reserves a seat atomically
 7. Duplicate application protection runs before creation
 8. Student + application records are created
-9. Success response is returned to the user
-10. WhatsApp follow-up link remains available
+9. A NOT_SUBMITTED payment record and a course-fee snapshot are created in the same transaction
+10. The student submits payment method, reference, amount, date, and receipt for review
+11. An authorized admin verifies or rejects the payment; only verification confirms admission
+12. WhatsApp follow-up link remains available
 
 ## Admin dashboard
 
@@ -182,6 +201,8 @@ Before deployment:
 - Set NEXT_PUBLIC_WHATSAPP_NUMBER
 - Run migrations in the target environment
 - Ensure the app builds successfully with `npm run build`
+
+Apply the additive payment migration in deployment with `npx prisma migrate deploy --config prisma7.config.ts` (or `npm run db:migrate` locally after reviewing the SQL). Do not use database reset or force-reset commands. The migration adds a nullable course fee and new payment table without rewriting existing records.
 
 Do not deploy until the required production environment variables are configured.
 

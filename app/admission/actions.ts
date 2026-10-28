@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { createPaymentAccessToken, paymentAccessCookieName } from "@/lib/payment-access";
 import { db } from "@/lib/db";
 import { isPublicBatchEligible } from "@/lib/batch-eligibility";
 import { admissionSchema } from "@/lib/validations/admission";
 
 export type AdmissionResult =
-  | { ok: true; name: string; applicationId: string; batchId: string }
+  | { ok: true; name: string; applicationId: string; batchId: string; courseName: string; fee: string | null }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
 export async function submitAdmission(formData: FormData): Promise<AdmissionResult> {
@@ -17,8 +19,16 @@ export async function submitAdmission(formData: FormData): Promise<AdmissionResu
   }
 
   const input = parsed.data;
+  const paymentAccess = createPaymentAccessToken();
   try {
-    const result = await reserveAdmission(input);
+    const result = await reserveAdmission(input, paymentAccess.hash);
+    await (await cookies()).set(paymentAccessCookieName(result.applicationId), paymentAccess.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/admission",
+      maxAge: 60 * 60 * 24 * 30,
+    });
 
     revalidatePath("/");
     revalidatePath("/training");
@@ -27,7 +37,14 @@ export async function submitAdmission(formData: FormData): Promise<AdmissionResu
   } catch (error) {
     if (isSerializationFailure(error)) {
       try {
-        const result = await reserveAdmission(input);
+        const result = await reserveAdmission(input, paymentAccess.hash);
+        await (await cookies()).set(paymentAccessCookieName(result.applicationId), paymentAccess.token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/admission",
+          maxAge: 60 * 60 * 24 * 30,
+        });
         revalidatePath("/");
         revalidatePath("/training");
         revalidatePath("/admission");
@@ -57,7 +74,7 @@ async function reserveAdmission(input: {
   address?: string;
   notes?: string;
   batchId: string;
-}) {
+}, paymentTokenHash: string) {
     return db.$transaction(async (tx) => {
       const batch = await tx.batch.findUnique({ where: { id: input.batchId }, include: { course: true } });
       if (!batch || !isPublicBatchEligible(batch)) throw new Error("BATCH_UNAVAILABLE");
@@ -82,8 +99,9 @@ async function reserveAdmission(input: {
         data: { fullName: input.fullName, fatherName: input.fatherName, phone: input.phone, whatsapp: input.whatsapp, email: input.email, cnic: input.cnic || null, education: input.education, occupation: input.occupation || null, experience: input.experience || null, address: input.address || null },
       });
       const application = await tx.application.create({ data: { studentId: student.id, batchId: batch.id, notes: input.notes || null } });
+      await tx.payment.create({ data: { applicationId: application.id, expectedAmount: batch.course.fee, studentTokenHash: paymentTokenHash } });
       if (batch.reservedSeats + 1 >= batch.capacity) await tx.batch.update({ where: { id: batch.id }, data: { status: "FULL" } });
-      return { name: student.fullName, applicationId: application.id, batchId: batch.id };
+      return { name: student.fullName, applicationId: application.id, batchId: batch.id, courseName: batch.course.name, fee: batch.course.fee?.toString() ?? null };
     }, { isolationLevel: "Serializable" });
 }
 

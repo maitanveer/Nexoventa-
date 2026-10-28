@@ -33,6 +33,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
           data: { reservedSeats: { decrement: 1 } },
         });
         if (releasedSeat.count !== 1) throw new Error("SEAT_COUNT_INCONSISTENT");
+        await tx.auditLog.create({
+          data: { userId: admin.id, action: "SEAT_RELEASED", entity: "Application", entityId: parsedId.data, metadata: { batchId: application.batchId, reason: "Application deleted by admin" } },
+        });
 
         if (application.batch.status === "FULL") {
           await tx.batch.updateMany({

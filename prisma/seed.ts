@@ -20,13 +20,14 @@ async function main() {
     where: {
       slug: "medical-billing",
     },
-    update: {},
+    update: { fee: 18000 },
     create: {
       name: "Medical Billing",
       slug: "medical-billing",
       description:
         "Practical medical billing training with structured mentorship.",
       duration: "8 weeks",
+      fee: 18000,
       active: true,
     },
   });

@@ -76,6 +76,19 @@ export async function DELETE(request: Request) {
         if (updated.count !== 1) throw new Error("BATCH_SEAT_COUNT_INCONSISTENT");
       }
 
+      const releasedApplications = applications.filter((application) => application.seatStatus === "RESERVED");
+      if (releasedApplications.length > 0) {
+        await tx.auditLog.createMany({
+          data: releasedApplications.map((application) => ({
+            userId: admin.id,
+            action: "SEAT_RELEASED",
+            entity: "Application",
+            entityId: application.id,
+            metadata: { batchId: application.batchId, reason: "Applications deleted by admin" },
+          })),
+        });
+      }
+
       if (applications.length > 0) {
         const removed = await tx.application.deleteMany({ where: { id: { in: applications.map((application) => application.id) } } });
         if (removed.count !== applications.length) throw new Error("APPLICATIONS_CHANGED");

@@ -26,7 +26,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 	const slotWhere = selectedSlotId ? { batchId: selectedSlotId } : undefined;
 	const applicationWhere = { ...slotWhere, ...(selectedStatus ? { status: selectedStatus } : {}) };
 	const [applications, groupedStatuses] = await Promise.all([
-		db.application.findMany({ where: applicationWhere, include: { student: true, batch: { include: { course: true } } }, orderBy: { appliedAt: "desc" } }),
+		db.application.findMany({ where: applicationWhere, include: { student: true, batch: { include: { course: true } }, payment: { include: { reviewedBy: true } } }, orderBy: { appliedAt: "desc" } }),
 		db.application.groupBy({ by: ["status"], where: slotWhere, _count: { _all: true } }),
 	]);
 
@@ -69,7 +69,21 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 					<ApplicationTable applications={applications.map((application) => ({
 						id: application.id,
 						student: { fullName: application.student.fullName, phone: application.student.phone, email: application.student.email },
-						batch: { identifier: application.batch.identifier, startTime: application.batch.startTime, endTime: application.batch.endTime, course: { name: application.batch.course.name } },
+						batch: { identifier: application.batch.identifier, startTime: application.batch.startTime, endTime: application.batch.endTime, course: { name: application.batch.course.name, fee: application.batch.course.fee?.toString() ?? null } },
+						payment: application.payment ? {
+							id: application.payment.id,
+							status: application.payment.status,
+							courseFee: application.payment.expectedAmount?.toString() ?? null,
+							method: application.payment.method,
+							amount: application.payment.amount?.toString() ?? null,
+							transactionReference: application.payment.transactionReference,
+							paymentDate: application.payment.paymentDate?.toISOString() ?? null,
+							submittedAt: application.payment.submittedAt?.toISOString() ?? null,
+								reviewedAt: application.payment.reviewedAt?.toISOString() ?? null,
+								reviewedBy: application.payment.reviewedBy?.name || application.payment.reviewedBy?.email || null,
+							receiptAvailable: Boolean(application.payment.receiptPath),
+							rejectionReason: application.payment.rejectionReason,
+						} : null,
 						appliedAt: application.appliedAt.toISOString(),
 						status: application.status,
 					}))} returnTo={returnTo} />
