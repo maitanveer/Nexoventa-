@@ -16,7 +16,7 @@ export default async function AdminDashboard() {
     db.batch.count({ where: { status: "OPEN", course: { active: true } } }),
     db.batch.count({ where: { status: "FULL" } }),
     db.batch.findMany({ where: { status: { in: ["OPEN", "FULL"] } }, select: { capacity: true, reservedSeats: true } }),
-    db.student.count(),
+    db.student.count({ where: { applications: { some: { status: "CONFIRMED" } } } }),
     db.batch.findMany({
       where: { OR: [{ status: { in: ["OPEN", "FULL"] } }, { applications: { some: {} } }] },
       include: { course: true, _count: { select: { applications: true } } },
@@ -80,7 +80,7 @@ export default async function AdminDashboard() {
                     <td>{application.batch.course.name}<small>{application.batch.identifier}</small></td>
                     <td>{application.appliedAt.toLocaleDateString("en-GB")}</td>
                     <td><span className={`table-status status-${application.status.toLowerCase()}`}>{application.status}</span></td>
-                    <td><a className="admin-action" href="/admin/applications">Review payment</a></td>
+                    <td><a className="admin-action" href="/admin/applications">Review application</a></td>
                   </tr>
                 ))}
                 {applications.length === 0 && <tr><td colSpan={6}><div className="empty-state">No applications yet.</div></td></tr>}

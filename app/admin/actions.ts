@@ -26,24 +26,44 @@ export async function logoutAdmin() {
 export async function updateApplicationStatus(formData: FormData) {
   const admin = await requireMutation();
   const returnTo = getApplicationReturnPath(formData.get("returnTo"));
-  const parsed = z.object({ id: z.string().min(1), status: z.enum(["PENDING", "CANCELLED", "WAITLISTED"]) }).safeParse({ id: formData.get("id"), status: formData.get("status") });
+  const parsed = z.object({ id: z.string().cuid(), status: z.enum(["PENDING", "CONFIRMED", "REJECTED", "CANCELLED", "WAITLISTED"]) }).safeParse({ id: formData.get("id"), status: formData.get("status") });
   if (!parsed.success) return;
 
   const { id, status } = parsed.data;
   try {
     await db.$transaction(async (tx) => {
-      const application = await tx.application.findUnique({ where: { id }, include: { batch: true, payment: true } });
-      if (!application) return;
+      const application = await tx.application.findUnique({ where: { id }, include: { batch: true } });
+      if (!application || application.status === "CONFIRMED" || application.status === "REJECTED") throw new Error("APPLICATION_NOT_REVIEWABLE");
+      if (application.status === status) return;
 
-      const nextStatus = status;
-      if (application.payment?.status === "VERIFIED" && nextStatus === "PENDING") throw new Error("VERIFIED_PAYMENT_CANNOT_BE_REOPENED");
-      const releasing = application.seatStatus === "RESERVED" && nextStatus === "CANCELLED";
-      const reserving = application.seatStatus === "RELEASED" && nextStatus === "PENDING";
+      if (status === "CONFIRMED") {
+        if (application.status !== "PENDING") throw new Error("APPLICATION_NOT_REVIEWABLE");
+        if (application.seatStatus !== "RESERVED" || application.batch.reservedSeats < 1 || application.batch.reservedSeats > application.batch.capacity) {
+          throw new Error("SEAT_UNAVAILABLE");
+        }
+
+        const confirmedAt = new Date();
+        const updated = await tx.application.updateMany({
+          where: { id, status: "PENDING", seatStatus: "RESERVED" },
+          data: { status, confirmedAt },
+        });
+        if (updated.count !== 1) throw new Error("APPLICATION_NOT_REVIEWABLE");
+        await tx.auditLog.create({
+          data: { userId: admin.id, action: "APPLICATION_CONFIRMED", entity: "Application", entityId: id, metadata: { batchId: application.batchId } },
+        });
+        return;
+      }
+
+      const releasing = application.seatStatus === "RESERVED" && (status === "CANCELLED" || status === "REJECTED");
+      const reserving = application.seatStatus === "RELEASED" && status === "PENDING";
 
       if (reserving) {
         const updated = await tx.batch.updateMany({
           where: { id: application.batchId, reservedSeats: { lt: application.batch.capacity } },
-          data: { reservedSeats: { increment: 1 } },
+          data: {
+            reservedSeats: { increment: 1 },
+            ...(application.batch.reservedSeats + 1 >= application.batch.capacity ? { status: "FULL" as const } : {}),
+          },
         });
         if (updated.count !== 1) throw new Error("BATCH_FULL");
       }
@@ -58,21 +78,26 @@ export async function updateApplicationStatus(formData: FormData) {
         });
         if (released.count !== 1) throw new Error("SEAT_COUNT_INCONSISTENT");
         await tx.auditLog.create({
-          data: { userId: admin.id, action: "SEAT_RELEASED", entity: "Application", entityId: application.id, metadata: { batchId: application.batchId, reason: "Application cancelled by admin" } },
+          data: { userId: admin.id, action: "SEAT_RELEASED", entity: "Application", entityId: application.id, metadata: { batchId: application.batchId, reason: `Application ${status.toLowerCase()} by admin` } },
         });
       }
 
-      await tx.application.update({
-        where: { id },
+      const updated = await tx.application.updateMany({
+        where: { id, status: application.status, seatStatus: application.seatStatus },
         data: {
-          status: nextStatus,
+          status,
           seatStatus: releasing ? "RELEASED" : reserving ? "RESERVED" : application.seatStatus,
           confirmedAt: null,
         },
       });
+      if (updated.count !== 1) throw new Error("APPLICATION_NOT_REVIEWABLE");
+      await tx.auditLog.create({
+        data: { userId: admin.id, action: status === "REJECTED" ? "APPLICATION_REJECTED" : "APPLICATION_STATUS_UPDATED", entity: "Application", entityId: id, metadata: { batchId: application.batchId, from: application.status, to: status } },
+      });
     });
   } catch (error) {
     if (error instanceof Error && error.message === "BATCH_FULL") redirect(withApplicationError(returnTo, "batch-full"));
+    if (error instanceof Error && error.message === "SEAT_UNAVAILABLE") redirect(withApplicationError(returnTo, "seat-unavailable"));
     redirect(withApplicationError(returnTo, "update-failed"));
   }
 
@@ -82,83 +107,6 @@ export async function updateApplicationStatus(formData: FormData) {
   revalidatePath("/admin/batches");
   revalidatePublicTraining();
   redirect(returnTo);
-}
-
-export async function verifyPayment(formData: FormData) {
-  const admin = await requireMutation();
-  const parsed = z.object({ paymentId: z.string().cuid() }).safeParse({ paymentId: formData.get("paymentId") });
-  if (!parsed.success) return { ok: false, message: "Invalid payment review request." };
-
-  try {
-    await db.$transaction(async (tx) => {
-      const payment = await tx.payment.findUnique({
-        where: { id: parsed.data.paymentId },
-        include: { application: { include: { batch: true } } },
-      });
-      if (!payment || payment.status !== "PENDING_VERIFICATION" || payment.application.status !== "PENDING") throw new Error("PAYMENT_NOT_REVIEWABLE");
-      if (!payment.method || !payment.amount || !payment.transactionReference || !payment.paymentDate || !payment.receiptPath || !payment.submittedAt) throw new Error("PAYMENT_NOT_REVIEWABLE");
-      if (payment.application.seatStatus !== "RESERVED" || payment.application.batch.reservedSeats < 1 || payment.application.batch.reservedSeats > payment.application.batch.capacity) throw new Error("SEAT_UNAVAILABLE");
-
-      const reviewedAt = new Date();
-      const updatedPayment = await tx.payment.updateMany({
-        where: { id: payment.id, status: "PENDING_VERIFICATION" },
-        data: { status: "VERIFIED", reviewedById: admin.id, reviewedAt, verifiedAt: reviewedAt, rejectionReason: null },
-      });
-      const confirmedApplication = await tx.application.updateMany({
-        where: { id: payment.applicationId, status: "PENDING", seatStatus: "RESERVED" },
-        data: { status: "CONFIRMED", confirmedAt: reviewedAt },
-      });
-      if (updatedPayment.count !== 1 || confirmedApplication.count !== 1) throw new Error("PAYMENT_NOT_REVIEWABLE");
-      await tx.auditLog.create({ data: { userId: admin.id, action: "PAYMENT_VERIFIED", entity: "Payment", entityId: payment.id } });
-    }, { isolationLevel: "Serializable" });
-  } catch (error) {
-    if (error instanceof Error && error.message === "SEAT_UNAVAILABLE") return { ok: false, message: "The reserved seat is no longer available. Review the application and batch before verifying." };
-    if (error instanceof Error && error.message === "PAYMENT_NOT_REVIEWABLE") return { ok: false, message: "This payment is no longer awaiting review." };
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") return { ok: false, message: "Another update occurred during review. Refresh and try again." };
-    return { ok: false, message: "Payment verification failed. Please try again." };
-  }
-
-  revalidatePaymentReview();
-  return { ok: true, message: "Payment verified and admission confirmed." };
-}
-
-export async function rejectPayment(formData: FormData) {
-  const admin = await requireMutation();
-  const parsed = z.object({ paymentId: z.string().cuid(), reason: z.string().trim().min(5).max(500) }).safeParse({
-    paymentId: formData.get("paymentId"),
-    reason: formData.get("reason"),
-  });
-  if (!parsed.success) return { ok: false, message: "Enter a rejection reason of at least five characters." };
-
-  try {
-    const updated = await db.$transaction(async (tx) => {
-      const payment = await tx.payment.findUnique({ where: { id: parsed.data.paymentId }, include: { application: true } });
-      if (!payment || payment.status !== "PENDING_VERIFICATION" || payment.application.status !== "PENDING") return false;
-      const reviewedAt = new Date();
-      const result = await tx.payment.updateMany({
-        where: { id: payment.id, status: "PENDING_VERIFICATION" },
-        data: { status: "REJECTED", reviewedById: admin.id, reviewedAt, verifiedAt: null, rejectionReason: parsed.data.reason },
-      });
-      if (result.count !== 1) return false;
-      await tx.auditLog.create({ data: { userId: admin.id, action: "PAYMENT_REJECTED", entity: "Payment", entityId: payment.id, metadata: { reason: parsed.data.reason } } });
-      return true;
-    }, { isolationLevel: "Serializable" });
-    if (!updated) return { ok: false, message: "This payment is no longer awaiting review." };
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") return { ok: false, message: "Another update occurred during review. Refresh and try again." };
-    return { ok: false, message: "Payment rejection failed. Please try again." };
-  }
-
-  revalidatePaymentReview();
-  return { ok: true, message: "Payment rejected. The student may correct and resubmit it." };
-}
-
-function revalidatePaymentReview() {
-  revalidatePath("/admin");
-  revalidatePath("/admin/applications");
-  revalidatePath("/admin/students");
-  revalidatePath("/admin/batches");
-  revalidatePublicTraining();
 }
 
 function getApplicationReturnPath(value: FormDataEntryValue | null) {
@@ -204,12 +152,11 @@ export async function updateCourseFee(formData: FormData) {
   }).safeParse({ id: formData.get("id"), fee: formData.get("fee") });
   if (!parsed.success) return;
 
-  await db.$transaction(async (tx) => {
-    await tx.course.update({ where: { id: parsed.data.id }, data: { fee: parsed.data.fee || null } });
-    await tx.payment.updateMany({
-      where: { status: "NOT_SUBMITTED", application: { is: { batch: { is: { courseId: parsed.data.id } } } } },
-      data: { expectedAmount: parsed.data.fee || null },
-    });
+  const course = await db.course.findUnique({ where: { id: parsed.data.id }, select: { slug: true } });
+  if (!course) return;
+  await db.course.update({
+    where: { id: parsed.data.id },
+    data: { fee: course.slug === "medical-billing" ? "18000" : parsed.data.fee || null },
   });
   revalidatePath("/admin/courses");
   revalidatePublicTraining();

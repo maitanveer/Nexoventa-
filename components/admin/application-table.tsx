@@ -4,20 +4,30 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { updateApplicationStatus } from "@/app/admin/actions";
-import { PaymentReviewControls } from "@/components/admin/payment-review-controls";
 import type { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import { whatsappUrlForNumber } from "@/lib/whatsapp";
 
 export type AdminApplicationRow = {
   id: string;
-  student: { fullName: string; phone: string; email: string };
+  student: {
+    fullName: string;
+    fatherName: string;
+    phone: string;
+    whatsapp: string;
+    email: string;
+    cnic: string | null;
+    education: string;
+    occupation: string | null;
+    experience: string | null;
+    address: string | null;
+  };
   batch: { identifier: string; startTime: string; endTime: string; course: { name: string; fee: string | null } };
-  payment: null | { id: string; status: string; courseFee: string | null; method: string | null; amount: string | null; transactionReference: string | null; paymentDate: string | null; submittedAt: string | null; reviewedAt: string | null; reviewedBy: string | null; receiptAvailable: boolean; rejectionReason: string | null };
+  notes: string | null;
   appliedAt: string;
   status: ApplicationStatus;
 };
 
-const applicationStatuses: ApplicationStatus[] = ["PENDING", "CANCELLED", "WAITLISTED"];
+const applicationStatuses: ApplicationStatus[] = ["PENDING", "CONFIRMED", "REJECTED", "CANCELLED", "WAITLISTED"];
 
 export function ApplicationTable({ applications, returnTo }: { applications: AdminApplicationRow[]; returnTo: string }) {
   const [rows, setRows] = useState(applications);
@@ -34,11 +44,6 @@ export function ApplicationTable({ applications, returnTo }: { applications: Adm
   const selectedApplications = rows.filter((application) => selectedIds.includes(application.id));
   const allRowsSelected = rows.length > 0 && selectedApplications.length === rows.length;
   const someRowsSelected = selectedApplications.length > 0 && !allRowsSelected;
-
-  useEffect(() => {
-    setRows(applications);
-    setSelectedIds([]);
-  }, [applications]);
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someRowsSelected;
@@ -113,7 +118,7 @@ export function ApplicationTable({ applications, returnTo }: { applications: Adm
       )}
       <div className="admin-table-scroll">
         <table>
-          <thead><tr><th className="application-select-cell"><label><input ref={selectAllRef} type="checkbox" checked={allRowsSelected} disabled={rows.length === 0 || bulkDeleting} onChange={(event) => setSelectedIds(event.currentTarget.checked ? rows.map((application) => application.id) : [])} /><span>Select All</span></label></th><th>Student</th><th>Training slot</th><th>Course / batch</th><th>Course fee</th><th>Payment</th><th>Payment status</th><th>Applied</th><th>Admission</th><th>Review actions</th></tr></thead>
+          <thead><tr><th className="application-select-cell"><label><input ref={selectAllRef} type="checkbox" checked={allRowsSelected} disabled={rows.length === 0 || bulkDeleting} onChange={(event) => setSelectedIds(event.currentTarget.checked ? rows.map((application) => application.id) : [])} /><span>Select All</span></label></th><th>Student</th><th>Training slot</th><th>Course / batch</th><th>Course fee</th><th>Submitted information</th><th>Applied</th><th>Admission</th><th>Review actions</th></tr></thead>
           <tbody>
             {rows.map((application) => {
               const phoneUrl = whatsappUrlForNumber(application.student.phone);
@@ -123,14 +128,27 @@ export function ApplicationTable({ applications, returnTo }: { applications: Adm
                   <td><strong>{application.student.fullName}</strong><small>{phoneUrl ? <a className="admin-phone-link" href={phoneUrl} target="_blank" rel="noopener noreferrer">{application.student.phone}</a> : application.student.phone} · {application.student.email}</small></td>
                   <td><span className="training-slot-badge">{application.batch.startTime} – {application.batch.endTime}</span></td>
                   <td>{application.batch.course.name}<small>{application.batch.identifier}</small></td>
-                  <td>{application.payment?.courseFee ? `PKR ${application.payment.courseFee}` : application.batch.course.fee ? `PKR ${application.batch.course.fee}` : "Not set"}</td>
-                  <td>{application.payment?.amount ? `PKR ${application.payment.amount}` : "Not submitted"}<small>{application.payment?.method?.replaceAll("_", " ") || ""}{application.payment?.transactionReference ? ` · ${application.payment.transactionReference}` : ""}</small></td>
-                  <td><span className={`table-status status-${(application.payment?.status || "NOT_SUBMITTED").toLowerCase()}`}>{application.payment?.status?.replaceAll("_", " ") || "NOT SUBMITTED"}</span><small>{application.payment?.paymentDate ? `Paid ${new Date(application.payment.paymentDate).toLocaleDateString("en-GB")}` : ""}{application.payment?.submittedAt ? ` · Submitted ${new Date(application.payment.submittedAt).toLocaleDateString("en-GB")}` : ""}</small>{application.payment?.reviewedAt && <small>Reviewed {new Date(application.payment.reviewedAt).toLocaleDateString("en-GB")}{application.payment.reviewedBy ? ` by ${application.payment.reviewedBy}` : ""}</small>}{application.payment?.rejectionReason && <small>Reason: {application.payment.rejectionReason}</small>}</td>
+                  <td>{application.batch.course.fee ? `PKR ${application.batch.course.fee}` : "Not set"}</td>
+                  <td>
+                    <details className="application-submitted-info">
+                      <summary>View details</summary>
+                      <dl>
+                        <Detail label="Father / guardian" value={application.student.fatherName} />
+                        <Detail label="WhatsApp" value={application.student.whatsapp} />
+                        <Detail label="Email" value={application.student.email} />
+                        <Detail label="Education" value={application.student.education} />
+                        <Detail label="CNIC" value={application.student.cnic} />
+                        <Detail label="Occupation" value={application.student.occupation} />
+                        <Detail label="Experience" value={application.student.experience} />
+                        <Detail label="Address" value={application.student.address} />
+                        <Detail label="Additional message" value={application.notes} />
+                      </dl>
+                    </details>
+                  </td>
                   <td>{new Date(application.appliedAt).toLocaleDateString("en-GB")}</td>
                   <td><span className={`table-status status-${application.status.toLowerCase()}`}>{application.status}</span></td>
                   <td>
                     <div className="application-row-actions">
-                      {application.payment && <PaymentReviewControls paymentId={application.payment.id} status={application.payment.status} hasReceipt={application.payment.receiptAvailable} />}
                       {!(["CONFIRMED", "REJECTED"] as string[]).includes(application.status) && <form action={updateApplicationStatus} className="status-form">
                         <input type="hidden" name="id" value={application.id} />
                         <input type="hidden" name="returnTo" value={returnTo} />
@@ -150,7 +168,7 @@ export function ApplicationTable({ applications, returnTo }: { applications: Adm
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={10}><div className="empty-state">No applications match these filters.</div></td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9}><div className="empty-state">No applications match these filters.</div></td></tr>}
           </tbody>
         </table>
       </div>
@@ -166,4 +184,8 @@ export function ApplicationTable({ applications, returnTo }: { applications: Adm
       </dialog>
     </>
   );
+}
+
+function Detail({ label, value }: { label: string; value: string | null }) {
+  return value ? <div><dt>{label}</dt><dd>{value}</dd></div> : null;
 }

@@ -7,7 +7,7 @@ type ExportKind = "all" | "selected";
 
 const options: Array<{ kind: ExportKind; label: string }> = [
   { kind: "all", label: "All Applicants" },
-  { kind: "selected", label: "Selected Students" },
+  { kind: "selected", label: "Confirmed Students" },
 ];
 
 export function ApplicationExport() {

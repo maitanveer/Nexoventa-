@@ -16,10 +16,10 @@ const exportDefinitions: Record<ExportKind, { label: string; sheetName: string; 
     emptyMessage: "No applicants found.",
   },
   selected: {
-    label: "Selected Students",
-    sheetName: "Selected Students",
-    filename: "Nexoventa-Selected-Students",
-    emptyMessage: "No selected students found.",
+    label: "Confirmed Students",
+    sheetName: "Confirmed Students",
+    filename: "Nexoventa-Confirmed-Students",
+    emptyMessage: "No confirmed students found.",
   },
 };
 

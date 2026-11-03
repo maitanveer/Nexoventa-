@@ -543,9 +543,6 @@ main[class*="bg-[var(--paper)]"] a.rounded-full:nth-child(2) { background: #0C10
   .training-slot-badge { white-space: normal; }
 }
 
-.payment-course-summary { margin: 18px 0 26px; color: #A7B0B8; font-size: 13px; line-height: 1.7; }
-.payment-course-summary strong { color: var(--foreground); }
-.payment-form h2 { margin: 0; color: var(--foreground); font-size: 28px; }
 .payment-instructions { margin: 22px 0; padding: 16px; border: 1px solid var(--line); background: #080B09; }
 .payment-instructions .eyebrow { margin-bottom: 8px; color: var(--brand-primary-muted); }
 .payment-instructions > p:last-child { margin: 0; color: #D4DBD3; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -559,10 +556,14 @@ main[class*="bg-[var(--paper)]"] a.rounded-full:nth-child(2) { background: #0C10
 .payment-policy-notice { margin: 0 0 22px; padding: 14px 16px; border-left: 3px solid var(--brand-primary); background: #080B09; color: #D4DBD3; font-size: 13px; line-height: 1.75; }
 .payment-policy-notice strong { color: var(--foreground); }
 .payment-pending-note { margin: 13px 0 0; color: #A7B0B8; font-size: 12px; line-height: 1.6; }
-.payment-review-controls { display: grid; align-content: start; gap: 8px; min-width: 170px; }
-.payment-rejection-form { display: grid; gap: 7px; min-width: 180px; }
-.payment-rejection-form .field input { min-width: 0; }
-.payment-review-message { max-width: 240px; color: #A7B0B8; white-space: normal; }
+.whatsapp-admission-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; padding: 15px 20px; border-radius: 8px; background: #25D366; color: #07140B; font-size: 14px; font-weight: 750; text-align: center; text-decoration: none; }
+.whatsapp-admission-button:hover, .whatsapp-admission-button:focus-visible { background: #42E078; outline: 2px solid #25D366; outline-offset: 3px; }
+.application-submitted-info summary { cursor: pointer; color: var(--brand-primary-muted); font-weight: 650; }
+.application-submitted-info dl { display: grid; min-width: 220px; gap: 5px; margin: 8px 0 0; }
+.application-submitted-info dl > div { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr); gap: 8px; }
+.application-submitted-info dt { color: #A7B0B8; }
+.application-submitted-info dd { margin: 0; overflow-wrap: anywhere; }
+.application-submitted-info dd, .application-submitted-info dt { font-size: 12px; }
 .course-fee-input { width: 120px; min-height: 38px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: #0D1416; color: #E4E9EC; }
 .course-fee-input:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
 

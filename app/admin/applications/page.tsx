@@ -26,7 +26,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 	const slotWhere = selectedSlotId ? { batchId: selectedSlotId } : undefined;
 	const applicationWhere = { ...slotWhere, ...(selectedStatus ? { status: selectedStatus } : {}) };
 	const [applications, groupedStatuses] = await Promise.all([
-		db.application.findMany({ where: applicationWhere, include: { student: true, batch: { include: { course: true } }, payment: { include: { reviewedBy: true } } }, orderBy: { appliedAt: "desc" } }),
+		db.application.findMany({ where: applicationWhere, include: { student: true, batch: { include: { course: true } } }, orderBy: { appliedAt: "desc" } }),
 		db.application.groupBy({ by: ["status"], where: slotWhere, _count: { _all: true } }),
 	]);
 
@@ -49,6 +49,8 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 	const returnTo = `/admin/applications${query.size ? `?${query.toString()}` : ""}`;
 	const errorMessage = params.error === "batch-full"
 		? "This batch is full. Choose a different status or training slot."
+		: params.error === "seat-unavailable"
+			? "This application no longer has a valid reserved seat. Review the batch before confirming."
 		: params.error === "update-failed"
 			? "The application status could not be updated. Please try again."
 			: null;
@@ -66,24 +68,22 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 					<div className="admin-section-head">
 						<div><p className="eyebrow">Review queue</p><h2>{applications.length} applications</h2></div>
 					</div>
-					<ApplicationTable applications={applications.map((application) => ({
+					<ApplicationTable key={applications.map((application) => `${application.id}:${application.status}`).join("|")} applications={applications.map((application) => ({
 						id: application.id,
-						student: { fullName: application.student.fullName, phone: application.student.phone, email: application.student.email },
-						batch: { identifier: application.batch.identifier, startTime: application.batch.startTime, endTime: application.batch.endTime, course: { name: application.batch.course.name, fee: application.batch.course.fee?.toString() ?? null } },
-						payment: application.payment ? {
-							id: application.payment.id,
-							status: application.payment.status,
-							courseFee: application.payment.expectedAmount?.toString() ?? null,
-							method: application.payment.method,
-							amount: application.payment.amount?.toString() ?? null,
-							transactionReference: application.payment.transactionReference,
-							paymentDate: application.payment.paymentDate?.toISOString() ?? null,
-							submittedAt: application.payment.submittedAt?.toISOString() ?? null,
-								reviewedAt: application.payment.reviewedAt?.toISOString() ?? null,
-								reviewedBy: application.payment.reviewedBy?.name || application.payment.reviewedBy?.email || null,
-							receiptAvailable: Boolean(application.payment.receiptPath),
-							rejectionReason: application.payment.rejectionReason,
-						} : null,
+						student: {
+							fullName: application.student.fullName,
+							fatherName: application.student.fatherName,
+							phone: application.student.phone,
+							whatsapp: application.student.whatsapp,
+							email: application.student.email,
+							cnic: application.student.cnic,
+							education: application.student.education,
+							occupation: application.student.occupation,
+							experience: application.student.experience,
+							address: application.student.address,
+						},
+						batch: { identifier: application.batch.identifier, startTime: application.batch.startTime, endTime: application.batch.endTime, course: { name: application.batch.course.name, fee: application.batch.course.slug === "medical-billing" ? "18000" : application.batch.course.fee?.toString() ?? null } },
+						notes: application.notes,
 						appliedAt: application.appliedAt.toISOString(),
 						status: application.status,
 					}))} returnTo={returnTo} />
