@@ -9,7 +9,7 @@ export function SiteFooter() {
       <div className="shell footer-grid">
         <div>
           <div className="brand footer-brand"><OfficialLogo variant="footer" /></div>
-          <p className="footer-copy">Trusted medical billing and RCM support for healthcare teams that want cleaner claims and stronger revenue flow.</p>
+          <p className="footer-copy">Trusted medical billing & RCM support for healthcare teams that want cleaner claims and stronger revenue flow.</p>
         </div>
         <div className="footer-links"><strong>Explore</strong><Link href="/about">About</Link><Link href="/services">Services</Link><Link href="/training">Training</Link><Link href="/faq">FAQ</Link><Link href="/announcements">Announcements</Link><Link href="/contact">Contact</Link></div>
         <div className="footer-links"><strong>Services</strong><Link href="/services">Medical Billing</Link><Link href="/services">Revenue Cycle Management</Link><Link href="/services">Denial Management</Link><Link href="/services">Provider Credentialing</Link><Link href="/services">Billing Audits</Link><Link href="/services">Training & Mentorship</Link></div>
