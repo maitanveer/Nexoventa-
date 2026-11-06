@@ -89,7 +89,7 @@ async function reserveAdmission(input: {
         batchId: batch.id,
         batchIdentifier: batch.identifier,
         courseName: batch.course.name,
-        fee: batch.course.slug === "medical-billing" ? "18000" : batch.course.fee?.toString() ?? null,
+        fee: batch.course.fee?.toString() ?? null,
       };
     }, { isolationLevel: "Serializable" });
 }

@@ -82,7 +82,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 							experience: application.student.experience,
 							address: application.student.address,
 						},
-						batch: { identifier: application.batch.identifier, startTime: application.batch.startTime, endTime: application.batch.endTime, course: { name: application.batch.course.name, fee: application.batch.course.slug === "medical-billing" ? "18000" : application.batch.course.fee?.toString() ?? null } },
+						batch: { identifier: application.batch.identifier, startTime: application.batch.startTime, endTime: application.batch.endTime, course: { name: application.batch.course.name, fee: application.batch.course.fee?.toString() ?? null } },
 						notes: application.notes,
 						appliedAt: application.appliedAt.toISOString(),
 						status: application.status,

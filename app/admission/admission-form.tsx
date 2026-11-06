@@ -7,7 +7,19 @@ import { whatsappUrl } from "@/lib/whatsapp";
 
 type BatchOption = { id: string; label: string; course: string; fee: string | null; available: number };
 
-const feeNotice = "Medical Billing Course Fee: PKR 18,000. Students must pay a minimum advance of PKR 1,500 to secure admission consideration. The advance is deducted from the total course fee. Please transfer your advance using one of the payment methods below and share a clear payment screenshot with Nexoventa through WhatsApp. Your admission will only be confirmed after the administrator reviews your application and payment.";
+function formatPkr(amount: string) {
+  const numericAmount = Number(amount);
+  return Number.isFinite(numericAmount)
+    ? new Intl.NumberFormat("en-PK", { maximumFractionDigits: 2 }).format(numericAmount)
+    : amount;
+}
+
+function getFeeNotice(courseName: string, fee: string | null) {
+  const feeSummary = fee
+    ? `${courseName} Course Fee: PKR ${formatPkr(fee)}.`
+    : `${courseName} Course Fee has not been set. Please confirm the fee with admissions before payment.`;
+  return `${feeSummary} Students must pay a minimum advance of PKR 1,500 to secure admission consideration. The advance is deducted from the total course fee. Please transfer your advance using one of the payment methods below and share a clear payment screenshot with Nexoventa through WhatsApp. Your admission will only be confirmed after the administrator reviews your application and payment.`;
+}
 
 export function AdmissionForm({ batches, selectedBatchId: initialBatchId }: { batches: BatchOption[]; selectedBatchId?: string }) {
   const [result, setResult] = useState<{
@@ -17,6 +29,7 @@ export function AdmissionForm({ batches, selectedBatchId: initialBatchId }: { ba
     phone?: string;
     applicationId?: string;
     courseName?: string;
+    fee?: string | null;
     batchIdentifier?: string;
   }>();
   const [pending, setPending] = useState(false);
@@ -45,6 +58,7 @@ export function AdmissionForm({ batches, selectedBatchId: initialBatchId }: { ba
         phone: response.phone,
         applicationId: response.applicationId,
         courseName: response.courseName,
+        fee: response.fee,
         batchIdentifier: response.batchIdentifier,
       });
     } else {
@@ -57,7 +71,7 @@ export function AdmissionForm({ batches, selectedBatchId: initialBatchId }: { ba
     const whatsappMessage = [
       "Hello Nexoventa Team,",
       "",
-      "I have submitted my Medical Billing course admission application.",
+      `I have submitted my ${result.courseName ?? "selected course"} admission application.`,
       "",
       `Name: ${result.name}`,
       `Phone: ${result.phone}`,
@@ -77,8 +91,8 @@ export function AdmissionForm({ batches, selectedBatchId: initialBatchId }: { ba
         <p className="eyebrow">Application pending review</p>
         <h2>Thank you, {result.name}.</h2>
         <p>Your application for <strong>{result.courseName}</strong> · {result.batchIdentifier} has been received and is pending administrator review.</p>
-        <p className="payment-policy-notice">{feeNotice}</p>
-        <p className="payment-pending-note">For example, a PKR 1,500 advance leaves a remaining course balance of PKR 16,500.</p>
+        <p className="payment-policy-notice">{getFeeNotice(result.courseName ?? "Course", result.fee ?? null)}</p>
+        {result.fee && Number.isFinite(Number(result.fee)) && <p className="payment-pending-note">For example, a PKR 1,500 advance leaves a remaining course balance of PKR {formatPkr(String(Math.max(Number(result.fee) - 1500, 0)))}.</p>}
         <div className="payment-instructions">
           <p className="eyebrow">UBL Bank Transfer</p>
           <dl>

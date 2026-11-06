@@ -50,6 +50,12 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
+@media (max-width: 420px) {
+  .course-editor-form.admin-form { grid-template-columns: 1fr; min-width: min(280px, calc(100vw - 48px)); }
+  .course-editor-form .field, .course-editor-form .course-description-field, .course-editor-form > button { grid-column: 1; }
+  .delete-confirmation-actions { flex-direction: column-reverse; }
+  .delete-confirmation-actions button { width: 100%; }
+}
 
 :root {
   --background: oklch(1 0 0);
@@ -527,6 +533,7 @@ main[class*="bg-[var(--paper)]"] a.rounded-full:nth-child(2) { background: #0C10
   .training-slot-options { grid-template-columns: 1fr; }
   .admin-slot-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-slot-filter { min-height: 104px; padding: 12px; }
+  .course-row-actions { min-width: 140px; }
   .application-row-actions { flex-direction: column; }
   .application-selection-toolbar { justify-content: space-between; flex-wrap: wrap; }
   .application-select-cell { width: 82px; }
@@ -566,6 +573,17 @@ main[class*="bg-[var(--paper)]"] a.rounded-full:nth-child(2) { background: #0C10
 .application-submitted-info dd, .application-submitted-info dt { font-size: 12px; }
 .course-fee-input { width: 120px; min-height: 38px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: #0D1416; color: #E4E9EC; }
 .course-fee-input:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+.course-fee-submit { min-height: 38px; padding: 7px 10px; border: 1px solid transparent; border-radius: 7px; background: var(--brand-primary); color: #031014; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.course-row-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 150px; }
+.course-editor { position: relative; }
+.course-editor > summary { width: fit-content; padding: 8px 12px; cursor: pointer; list-style: none; }
+.course-editor > summary::-webkit-details-marker { display: none; }
+.course-editor-form.admin-form { width: min(440px, calc(100vw - 48px)); min-width: 280px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 9px 0 0; padding: 14px; border-radius: 10px; }
+.course-editor-form .field { grid-column: span 1; }
+.course-editor-form .course-description-field, .course-editor-form > button { grid-column: 1 / -1; }
+.course-delete-trigger { min-height: 38px; padding: 7px 12px; border: 1px solid rgb(240 92 82 / 40%); border-radius: 8px; background: rgb(176 42 36 / 18%); color: #FF9991; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+.course-delete-trigger:hover { border-color: #F05C52; background: rgb(176 42 36 / 32%); color: #FFC0BA; }
+.course-delete-trigger:focus-visible { outline: 2px solid #FF8278; outline-offset: 2px; }
 
 /* Homepage and settings refinements */
 .hero { padding: clamp(64px, 7vw, 88px) 0 clamp(68px, 7vw, 84px); }

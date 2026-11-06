@@ -127,39 +127,161 @@ function withApplicationError(path: string, error: string) {
 }
 
 const courseInput = z.object({
-  name: z.string().trim().min(2),
-  slug: z.string().trim().min(2).regex(/^[a-z0-9-]+$/),
-  description: z.string().trim().min(10),
-  duration: z.string().trim().min(2),
+  name: z.string().trim().min(2).max(120),
+  slug: z.string().trim().min(2).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  description: z.string().trim().min(10).max(2000),
+  duration: z.string().trim().min(2).max(100),
   fee: z.string().trim().regex(/^\d{1,8}(?:\.\d{1,2})?$/).or(z.literal("")),
 });
 
 export async function createCourse(formData: FormData) {
   await requireMutation();
   const parsed = courseInput.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return;
+  if (!parsed.success) redirect("/admin/courses?error=invalid");
 
   const { fee, ...course } = parsed.data;
-  await db.course.create({ data: { ...course, fee: fee || null } });
-  revalidatePath("/admin/courses");
+  if (await db.course.findUnique({ where: { slug: course.slug }, select: { id: true } })) {
+    redirect("/admin/courses?error=slug-taken");
+  }
+
+  try {
+    await db.course.create({ data: { ...course, fee: fee || null } });
+  } catch (error) {
+    if (hasPrismaCode(error, "P2002")) redirect("/admin/courses?error=slug-taken");
+    throw error;
+  }
+
+  revalidateCoursePages();
+  redirect("/admin/courses?success=created");
+}
+
+export async function updateCourse(formData: FormData) {
+  const admin = await requireMutation();
+  const parsed = courseInput.extend({ id: z.string().cuid() }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect("/admin/courses?error=invalid");
+
+  const { id, fee, ...data } = parsed.data;
+  let outcome: "updated" | "not-found" | "slug-taken";
+
+  try {
+    outcome = await db.$transaction(async (tx) => {
+      const current = await tx.course.findUnique({ where: { id } });
+      if (!current) return "not-found";
+
+      const duplicate = await tx.course.findUnique({ where: { slug: data.slug }, select: { id: true } });
+      if (duplicate && duplicate.id !== id) return "slug-taken";
+
+      await tx.course.update({ where: { id }, data: { ...data, fee: fee || null } });
+      await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: "COURSE_UPDATED",
+          entity: "Course",
+          entityId: id,
+          metadata: {
+            before: { name: current.name, slug: current.slug, duration: current.duration, description: current.description, fee: current.fee?.toString() ?? null },
+            after: { ...data, fee: fee || null },
+          },
+        },
+      });
+
+      return "updated";
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (hasPrismaCode(error, "P2002")) redirect("/admin/courses?error=slug-taken");
+    if (hasPrismaCode(error, "P2025")) redirect("/admin/courses?error=not-found");
+    if (hasPrismaCode(error, "P2034")) redirect("/admin/courses?error=course-changed");
+    throw error;
+  }
+
+  if (outcome !== "updated") redirect(`/admin/courses?error=${outcome}`);
+
+  revalidateCoursePages();
+  redirect("/admin/courses?success=updated");
+}
+
+export async function deleteCourse(formData: FormData) {
+  const admin = await requireMutation();
+  const parsed = z.object({ id: z.string().cuid() }).safeParse({ id: formData.get("id") });
+  if (!parsed.success) redirect("/admin/courses?error=invalid");
+
+  let outcome: { kind: "deleted" | "not-found" } | {
+    kind: "in-use";
+    batches: number;
+    applications: number;
+    students: number;
+    payments: number;
+  };
+
+  try {
+    outcome = await db.$transaction(async (tx) => {
+      const course = await tx.course.findUnique({ where: { id: parsed.data.id }, select: { id: true, name: true } });
+      if (!course) return { kind: "not-found" };
+
+      const batches = await tx.batch.count({ where: { courseId: course.id } });
+      const applications = await tx.application.count({ where: { batch: { courseId: course.id } } });
+      const students = await tx.student.count({ where: { applications: { some: { batch: { courseId: course.id } } } } });
+      const payments = await tx.payment.count({ where: { application: { batch: { courseId: course.id } } } });
+
+      if (batches || applications || students || payments) {
+        return { kind: "in-use", batches, applications, students, payments };
+      }
+
+      await tx.course.delete({ where: { id: course.id } });
+      await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: "COURSE_DELETED",
+          entity: "Course",
+          entityId: course.id,
+          metadata: { name: course.name },
+        },
+      });
+
+      return { kind: "deleted" };
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (hasPrismaCode(error, "P2003")) redirect("/admin/courses?error=course-in-use");
+    if (hasPrismaCode(error, "P2025")) redirect("/admin/courses?error=not-found");
+    if (hasPrismaCode(error, "P2034")) redirect("/admin/courses?error=course-changed");
+    throw error;
+  }
+
+  if (outcome.kind === "in-use") redirect("/admin/courses?error=course-in-use");
+  if (outcome.kind === "not-found") redirect("/admin/courses?error=not-found");
+
+  revalidateCoursePages();
+  redirect("/admin/courses?success=deleted");
 }
 
 export async function updateCourseFee(formData: FormData) {
-  await requireMutation();
+  const admin = await requireMutation();
   const parsed = z.object({
     id: z.string().cuid(),
     fee: z.string().trim().regex(/^\d{1,8}(?:\.\d{1,2})?$/).or(z.literal("")),
   }).safeParse({ id: formData.get("id"), fee: formData.get("fee") });
-  if (!parsed.success) return;
+  if (!parsed.success) redirect("/admin/courses?error=invalid");
 
-  const course = await db.course.findUnique({ where: { id: parsed.data.id }, select: { slug: true } });
-  if (!course) return;
-  await db.course.update({
-    where: { id: parsed.data.id },
-    data: { fee: course.slug === "medical-billing" ? "18000" : parsed.data.fee || null },
+  const updated = await db.$transaction(async (tx) => {
+    const course = await tx.course.findUnique({ where: { id: parsed.data.id }, select: { id: true, fee: true } });
+    if (!course) return false;
+
+    const fee = parsed.data.fee || null;
+    await tx.course.update({ where: { id: course.id }, data: { fee } });
+    await tx.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: "COURSE_FEE_UPDATED",
+        entity: "Course",
+        entityId: course.id,
+        metadata: { before: course.fee?.toString() ?? null, after: fee },
+      },
+    });
+    return true;
   });
-  revalidatePath("/admin/courses");
-  revalidatePublicTraining();
+  if (!updated) redirect("/admin/courses?error=not-found");
+  revalidateCoursePages();
+  redirect("/admin/courses?success=fee-updated");
 }
 
 export async function toggleCourse(formData: FormData) {
@@ -171,7 +293,11 @@ export async function toggleCourse(formData: FormData) {
     await db.course.update({ where: { id }, data: { active: !course.active } });
   }
 
-  revalidatePath("/admin/courses");
+  revalidateCoursePages();
+}
+
+function hasPrismaCode(error: unknown, code: string) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 const batchInput = z.object({
@@ -374,6 +500,15 @@ function revalidatePublicTraining() {
   revalidatePath("/");
   revalidatePath("/training");
   revalidatePath("/admission");
+}
+
+function revalidateCoursePages() {
+  revalidatePublicTraining();
+  revalidatePath("/admin");
+  revalidatePath("/admin/courses");
+  revalidatePath("/admin/batches");
+  revalidatePath("/admin/applications");
+  revalidatePath("/admin/students");
 }
 
 const announcementInput = z.object({ title: z.string().trim().min(2), slug: z.string().trim().min(2).regex(/^[a-z0-9-]+$/), content: z.string().trim().min(10) });
